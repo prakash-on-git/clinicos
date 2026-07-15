@@ -1,7 +1,9 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
-# Maven 3.9 + JDK 21 Alpine — compiles the project and produces the fat JAR.
-# Using a separate build stage keeps the final image lean (no Maven cache, no JDK).
-FROM maven:3.9-eclipse-temurin-21-alpine AS builder
+# Maven 3.9 + JDK 21 on Ubuntu Jammy (not Alpine) — Alpine's package repos only
+# ship gnucobol on the "edge" branch, not on any stable release, so `apk add
+# gnucobol` fails at build time. Ubuntu's universe component carries it on
+# jammy, so we use the Ubuntu-based temurin image and enable universe below.
+FROM maven:3.9-eclipse-temurin-21-jammy AS builder
 
 WORKDIR /build
 
@@ -14,20 +16,28 @@ RUN mvn dependency:go-offline -q
 COPY src src
 RUN mvn package -DskipTests -q
 
-# Compile the GnuCOBOL billing engine (see src/main/cobol/BillingCalc.cbl)
-RUN apk add --no-cache gnucobol
+# Compile the GnuCOBOL billing engine (see src/main/cobol/BillingCalc.cbl).
+# gnucobol lives in Ubuntu's universe component, which isn't enabled by
+# default in the base image, so add it explicitly before installing.
+RUN echo "deb http://archive.ubuntu.com/ubuntu jammy universe" > /etc/apt/sources.list.d/universe.list \
+    && apt-get update && apt-get install -y --no-install-recommends gnucobol \
+    && rm -rf /var/lib/apt/lists/*
 COPY scripts/compile-cobol.sh scripts/compile-cobol.sh
 RUN ./scripts/compile-cobol.sh /build/cobol-out
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
-# Minimal JRE 21 Alpine — only what's needed to run the JAR.
-FROM eclipse-temurin:21-jre-alpine
+# Minimal JRE 21 on Ubuntu Jammy — only what's needed to run the JAR.
+FROM eclipse-temurin:21-jre-jammy
 
-# gnucobol provides libcob.so, needed at runtime by the compiled billing_calc binary
-RUN apk add --no-cache gnucobol
+# gnucobol provides libcob.so (needed at runtime by the compiled billing_calc
+# binary) and wget (used by the HEALTHCHECK below) — neither ships by default,
+# and gnucobol needs the universe component enabled (see builder stage above).
+RUN echo "deb http://archive.ubuntu.com/ubuntu jammy universe" > /etc/apt/sources.list.d/universe.list \
+    && apt-get update && apt-get install -y --no-install-recommends gnucobol wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user/group for security — never run as root in production
-RUN addgroup -S clinicos && adduser -S clinicos -G clinicos
+RUN groupadd -r clinicos && useradd -r -g clinicos clinicos
 
 WORKDIR /app
 
