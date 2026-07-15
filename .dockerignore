@@ -1,0 +1,34 @@
+# Build output — re-created inside the Docker build stage
+target/
+
+# Version control
+.git/
+.gitignore
+
+# IDE / editor directories
+.idea/
+*.iml
+.vscode/
+*.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Local environment overrides (never bake secrets into the image)
+.env
+.env.*
+
+# Maven wrapper cache (not needed inside Docker — Maven is in the builder image)
+.mvn/
+
+# Documentation (not needed at runtime)
+*.md
+api.md
+architecture.md
+plan.md
+TODO.md
+HELP.md
+
+# Test source and reports (excluded at build time via -DskipTests)
+src/test/

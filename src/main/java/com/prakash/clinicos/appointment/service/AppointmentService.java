@@ -21,11 +21,15 @@ import com.prakash.clinicos.audit.service.AuditService;
 import com.prakash.clinicos.notification.service.NotificationService;
 import com.prakash.clinicos.security.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static com.prakash.clinicos.config.RedisConfig.DOCTOR_AVAILABILITY_CACHE;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -59,6 +63,7 @@ public class AppointmentService {
     private final DoctorAvailabilityService availabilityService;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final CacheManager cacheManager;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
                                ClinicRepository clinicRepository,
@@ -68,7 +73,8 @@ public class AppointmentService {
                                DoctorTreatmentRepository doctorTreatmentRepository,
                                DoctorAvailabilityService availabilityService,
                                NotificationService notificationService,
-                               AuditService auditService) {
+                               AuditService auditService,
+                               CacheManager cacheManager) {
         this.appointmentRepository = appointmentRepository;
         this.clinicRepository = clinicRepository;
         this.doctorRepository = doctorRepository;
@@ -78,6 +84,20 @@ public class AppointmentService {
         this.availabilityService = availabilityService;
         this.notificationService = notificationService;
         this.auditService = auditService;
+        this.cacheManager = cacheManager;
+    }
+
+    /**
+     * Evicts the cached availability slot list for one doctor/date pair.
+     * Called after any write that changes which slots are free, so a booking
+     * made a moment ago is never masked by a stale cache entry within the
+     * cache's TTL window.
+     */
+    private void evictAvailability(Long doctorId, LocalDate date) {
+        Cache cache = cacheManager.getCache(DOCTOR_AVAILABILITY_CACHE);
+        if (cache != null) {
+            cache.evict(doctorId + "_" + date);
+        }
     }
 
     // ── Book ──────────────────────────────────────────────────────────────────
@@ -184,6 +204,7 @@ public class AppointmentService {
                 .build();
 
         appointment = appointmentRepository.save(appointment);
+        evictAvailability(doctor.getId(), req.getAppointmentDate());
         log.info("Appointment booked: id={}, doctor={}, patient={}, date={}, time={}",
                 appointment.getId(), doctor.getId(), patient.getId(),
                 req.getAppointmentDate(), startTime.format(TIME_FMT));
@@ -301,6 +322,7 @@ public class AppointmentService {
 
         log.info("Appointment cancelled: id={}, by={}", appointmentId, principal.getEmail());
         AppointmentResponse cancelResult = toResponseWithNames(appointmentRepository.save(appt));
+        evictAvailability(appt.getDoctorId(), appt.getAppointmentDate());
 
         notificationService.notifyAppointmentCancelled(clinicId, appt.getId(),
                 appt.getPatientId(), cancelResult.getDoctorName(), appt.getAppointmentDate());
@@ -374,6 +396,8 @@ public class AppointmentService {
                 .build();
 
         newAppt = appointmentRepository.save(newAppt);
+        evictAvailability(old.getDoctorId(), old.getAppointmentDate());
+        evictAvailability(doctor.getId(), req.getNewDate());
         log.info("Appointment rescheduled: old={} → new={}, date={}, time={}",
                 old.getId(), newAppt.getId(), req.getNewDate(), req.getNewStartTime().format(TIME_FMT));
 

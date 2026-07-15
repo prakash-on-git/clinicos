@@ -12,11 +12,14 @@ import com.prakash.clinicos.exception.AppException;
 import com.prakash.clinicos.security.UserPrincipal;
 import com.prakash.clinicos.subscription.service.SubscriptionService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static com.prakash.clinicos.config.RedisConfig.DOCTOR_AVAILABILITY_CACHE;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -133,6 +136,7 @@ public class DoctorService {
     }
 
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public DoctorResponse updateDoctor(Long clinicId, Long doctorId,
                                         UpdateDoctorRequest req, UserPrincipal principal) {
         Doctor doctor = findDoctorOrThrow(doctorId);
@@ -223,6 +227,7 @@ public class DoctorService {
      * Validates cross-field rules per override type.
      */
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public DoctorDayOverrideResponse addOrUpdateOverride(Long clinicId, Long doctorId,
                                                           DoctorDayOverrideRequest req,
                                                           UserPrincipal principal) {
@@ -251,6 +256,7 @@ public class DoctorService {
     }
 
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public void removeOverride(Long clinicId, Long doctorId, LocalDate date, UserPrincipal principal) {
         Doctor doctor = findDoctorOrThrow(doctorId);
         assertSameClinic(doctor, clinicId);
@@ -281,6 +287,7 @@ public class DoctorService {
      * Returns all successfully created leave entries.
      */
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public List<DoctorLeaveResponse> addLeave(Long clinicId, Long doctorId,
                                                DoctorLeaveRequest req, UserPrincipal principal) {
         Doctor doctor = findDoctorOrThrow(doctorId);
@@ -319,6 +326,7 @@ public class DoctorService {
     }
 
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public void removeLeave(Long clinicId, Long doctorId, LocalDate date, UserPrincipal principal) {
         Doctor doctor = findDoctorOrThrow(doctorId);
         assertSameClinic(doctor, clinicId);

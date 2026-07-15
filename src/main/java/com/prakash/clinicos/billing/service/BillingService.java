@@ -10,6 +10,9 @@ import com.prakash.clinicos.billing.dto.request.InvoiceItemRequest;
 import com.prakash.clinicos.billing.dto.response.InvoiceItemResponse;
 import com.prakash.clinicos.billing.dto.response.InvoiceResponse;
 import com.prakash.clinicos.billing.dto.response.PaymentResponse;
+import com.prakash.clinicos.billing.cobol.BillingCalcResult;
+import com.prakash.clinicos.billing.cobol.CobolBillingCalculator;
+import com.prakash.clinicos.billing.cobol.CobolUnavailableException;
 import com.prakash.clinicos.billing.entity.*;
 import com.prakash.clinicos.billing.repository.InvoiceItemRepository;
 import com.prakash.clinicos.billing.repository.InvoiceRepository;
@@ -55,6 +58,7 @@ public class BillingService {
     private final AppointmentRepository appointmentRepository;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final CobolBillingCalculator cobolBillingCalculator;
 
     public BillingService(InvoiceRepository invoiceRepository,
                           InvoiceItemRepository itemRepository,
@@ -64,7 +68,8 @@ public class BillingService {
                           PatientRepository patientRepository,
                           AppointmentRepository appointmentRepository,
                           NotificationService notificationService,
-                          AuditService auditService) {
+                          AuditService auditService,
+                          CobolBillingCalculator cobolBillingCalculator) {
         this.invoiceRepository = invoiceRepository;
         this.itemRepository = itemRepository;
         this.paymentRepository = paymentRepository;
@@ -74,6 +79,7 @@ public class BillingService {
         this.appointmentRepository = appointmentRepository;
         this.notificationService = notificationService;
         this.auditService = auditService;
+        this.cobolBillingCalculator = cobolBillingCalculator;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -134,29 +140,44 @@ public class BillingService {
             subtotal = subtotal.add(item.getQuantity().multiply(item.getUnitPrice()));
         }
 
-        // 7. Discount
+        // 7. Discount — guard check first (a subtraction the COBOL engine's unsigned
+        // fields can't safely absorb if discount exceeds subtotal)
         BigDecimal discountPct = coalesce(req.getDiscountPercent());
-        BigDecimal discountAmt;
-        if (req.getDiscountPercent() != null && req.getDiscountPercent().compareTo(BigDecimal.ZERO) > 0) {
-            discountAmt = subtotal.multiply(discountPct)
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        } else {
-            discountAmt = coalesce(req.getDiscountAmount());
-            discountPct = BigDecimal.ZERO;
-        }
+        BigDecimal requestedDiscountAmt = coalesce(req.getDiscountAmount());
+        boolean percentBased = req.getDiscountPercent() != null
+                && req.getDiscountPercent().compareTo(BigDecimal.ZERO) > 0;
 
-        if (discountAmt.compareTo(subtotal) > 0) {
+        BigDecimal estimatedDiscount = percentBased
+                ? subtotal.multiply(discountPct).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                : requestedDiscountAmt;
+        if (estimatedDiscount.compareTo(subtotal) > 0) {
             throw new AppException(HttpStatus.BAD_REQUEST,
                     "Discount cannot exceed subtotal");
         }
 
-        // 8. Tax
+        // 8. Discount + tax + total — delegated to the GnuCOBOL billing engine for
+        // fixed-point decimal arithmetic, falling back to the equivalent Java
+        // calculation if the compiled binary isn't available on this machine.
         BigDecimal taxPct = coalesce(req.getTaxPercent());
-        BigDecimal taxableAmount = subtotal.subtract(discountAmt);
-        BigDecimal taxAmt = taxableAmount.multiply(taxPct)
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-
-        BigDecimal total = taxableAmount.add(taxAmt);
+        BigDecimal discountAmt;
+        BigDecimal taxAmt;
+        BigDecimal total;
+        try {
+            BillingCalcResult calc = cobolBillingCalculator.calculate(
+                    subtotal, discountPct, requestedDiscountAmt, taxPct);
+            discountAmt = calc.discountAmount();
+            taxAmt = calc.taxAmount();
+            total = calc.totalAmount();
+        } catch (CobolUnavailableException e) {
+            log.warn("COBOL billing engine unavailable, using Java fallback: {}", e.getMessage());
+            discountAmt = estimatedDiscount;
+            BigDecimal taxableAmount = subtotal.subtract(discountAmt);
+            taxAmt = taxableAmount.multiply(taxPct).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            total = taxableAmount.add(taxAmt);
+        }
+        if (!percentBased) {
+            discountPct = BigDecimal.ZERO;
+        }
 
         // 9. Invoice number: INV-YYYY-NNNNN
         int year = Year.now().getValue();

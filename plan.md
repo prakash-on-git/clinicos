@@ -294,9 +294,25 @@ Target: **~150 REST APIs**
 
 # Resume Entry
 
-**ClinicOS – Multi-Tenant Clinic Management SaaS**
+ClinicOS — Multi-Tenant Clinic Management SaaS | Personal Project | 2025–Present
+Spring Boot 4 · Java 21 · PostgreSQL · Redis · WebSocket/STOMP · Docker · GitHub Actions · OpenRouter AI · GnuCOBOL · Razorpay · Prometheus · Grafana · Spring Security · JUnit 5 · Testcontainers
 
-- Architected and developed a production-grade clinic management platform using Spring Boot 3, Java 21, PostgreSQL, Redis, RabbitMQ, and Next.js.
-- Implemented JWT authentication, RBAC, appointment scheduling, prescriptions, billing, and an embeddable appointment widget.
-- Designed asynchronous notification workflows, Redis-backed caching, WebSocket queue updates, and Dockerized deployment.
-- Built and documented 150+ REST APIs with OpenAPI, Flyway migrations, Testcontainers, and CI/CD.
+- Architected a production-grade multi-tenant SaaS platform from scratch across 26 feature phases, delivering 150+ REST endpoints covering authentication, appointment scheduling, walk-in queue management, billing, medical records,
+  patient portal, subscriptions, and analytics — with full end-to-end ownership from Flyway DB schema design through Dockerised deployment.
+- Eliminated cross-tenant data leakage across all 150+ endpoints by implementing stateless JWT authentication (JJWT 0.12.6) with 3-tier RBAC (CLINIC_ADMIN, PATIENT, SUPER_ADMIN) and per-clinic request scoping enforced at the
+  service layer, making unauthorized cross-tenant access structurally impossible by design.
+- Enforced code quality at every merge by configuring a JaCoCo coverage gate in a GitHub Actions CI/CD pipeline, backed by JUnit 5 unit tests (Mockito strict mode) and Testcontainers integration tests running against a real
+  PostgreSQL container — covering critical booking validation, auth flows, and appointment status-machine transitions with zero mocking of the database.
+- Reduced scheduling query load and eliminated client polling by implementing Redis-backed caching for doctor availability computations and replacing repeated GET calls with STOMP WebSocket push events for live queue board updates
+  — improving responsiveness under concurrent booking windows.
+- Built an agentic AI clinical assistant using the OpenRouter multi-model API with structured tool-use, enabling natural-language appointment booking, patient history queries, and prescription drafts from a single prompt — applying
+  LLM orchestration patterns used in production healthtech products.
+- Integrated a GnuCOBOL billing subprocess with the Spring Boot backend for financial calculations, pairing COBOL's IEEE-standard decimal precision with a modern REST service — a cross-language IPC architecture used in banking
+  cores, brought into a healthcare SaaS context.
+- Containerised the full stack with a multi-stage Dockerfile (Maven builder → JRE 21 Alpine runtime) and Docker Compose, then automated a GitHub Actions pipeline (lint → test → build → Docker image publish) so every push to main
+  produces a tested, deployment-ready image.
+- Instrumented the platform with Spring Actuator, Prometheus metric scraping, and Grafana dashboards tracking p50/p95 request latency, JVM heap, and HikariCP connection pool saturation — enabling sub-minute incident detection in a
+  production observability setup.
+
+"Financial calculations are where most bugs cause real money loss. COBOL was designed specifically for decimal arithmetic precision — it's what banks run. I wanted to understand why those systems exist and how to bridge them with
+modern APIs, so I built a GnuCOBOL subprocess that my Spring Boot service calls over IPC. It's the same architectural pattern the big banking cores use."

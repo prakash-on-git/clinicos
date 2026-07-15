@@ -21,6 +21,15 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  cache:
+    type: redis
+
 server:
   port: ${PORT:8080}
 
@@ -32,6 +41,30 @@ logging:
   level:
     com.prakash.clinicos: ${LOG_LEVEL:INFO}
     org.hibernate.SQL: WARN
+
+# ── Actuator / Prometheus ──────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # p50/p95/p99 for HTTP request latency — off by default, since publishing
+      # per-request percentile buckets for every endpoint isn't free
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 # ── Springdoc / Swagger UI ────────────────────────────────────────────────────
 springdoc:
@@ -53,3 +86,20 @@ app:
     secret: ${JWT_SECRET:zyHjz85kJ7Ls02cQqMZshaV6PEuuXlfTZ0FkPdj+52C7wE061uoB/hyDa/Af2JyZyMv1RSXs5m0o0PoqLqfkHQ==}
     access-token-expiration: ${JWT_ACCESS_EXPIRY:900000}        # 15 minutes in milliseconds
     refresh-token-expiration: ${JWT_REFRESH_EXPIRY:604800000}   # 7 days in milliseconds
+
+  cobol:
+    # Path to the compiled GnuCOBOL billing binary (scripts/compile-cobol.sh).
+    # Falls back to Java BigDecimal math automatically if not found — see
+    # CobolBillingCalculator / BillingService.
+    binary-path: ${COBOL_BINARY_PATH:target/cobol/billing_calc}
+
+  ai:
+    openrouter:
+      # Get a key at https://openrouter.ai/keys — leave unset to develop everything
+      # else normally; the /ai/assistant endpoint just returns 503 until it's set.
+      api-key: ${OPENROUTER_API_KEY:}
+      base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+      # Free-tier model as of writing. OpenRouter's free-model lineup changes
+      # over time — check https://openrouter.ai/models?max_price=0 and confirm
+      # whichever model you pick supports tool/function calling.
+      model: ${OPENROUTER_MODEL:meta-llama/llama-3.3-70b-instruct:free}

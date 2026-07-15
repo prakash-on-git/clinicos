@@ -1,0 +1,14 @@
+# Test profile — datasource overridden by @DynamicPropertySource in AbstractIntegrationTest
+# (Testcontainers injects the real PostgreSQL URL at runtime)
+
+spring:
+  cache:
+    # In-memory cache in tests — no Redis dependency, deterministic, no TTL surprises
+    type: simple
+
+logging:
+  level:
+    com.prakash.clinicos: WARN
+    org.hibernate.SQL: WARN
+    org.testcontainers: WARN
+    com.zaxxer.hikari: WARN

@@ -10,9 +10,12 @@ import com.prakash.clinicos.doctor.repository.*;
 import com.prakash.clinicos.exception.AppException;
 import com.prakash.clinicos.security.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static com.prakash.clinicos.config.RedisConfig.DOCTOR_AVAILABILITY_CACHE;
 
 import java.time.DayOfWeek;
 import java.util.Comparator;
@@ -59,6 +62,7 @@ public class DoctorScheduleService {
      *   - max 4 shifts per day
      */
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public List<DoctorWeeklyScheduleResponse> replaceFullSchedule(Long doctorId,
                                                                    List<DayScheduleRequest> shifts,
                                                                    UserPrincipal principal) {
@@ -87,6 +91,7 @@ public class DoctorScheduleService {
 
     /** Replace shifts for a single day. Other days are untouched. */
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public List<DoctorWeeklyScheduleResponse> replaceDaySchedule(Long doctorId,
                                                                    DayOfWeek day,
                                                                    List<DayScheduleRequest> shifts,
@@ -118,6 +123,7 @@ public class DoctorScheduleService {
 
     /** Remove all shifts for a day — doctor doesn't work that weekday at all. */
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public void clearDaySchedule(Long doctorId, DayOfWeek day, UserPrincipal principal) {
         Doctor doctor = findDoctorOrThrow(doctorId);
         assertOwnership(doctor, principal);
@@ -146,6 +152,7 @@ public class DoctorScheduleService {
      *   - breaks fall within at least one of the doctor's scheduled working windows that day
      */
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public List<DoctorBreakResponse> replaceDayBreaks(Long doctorId,
                                                        DayOfWeek day,
                                                        List<DoctorBreakRequest> breaks,
@@ -174,6 +181,7 @@ public class DoctorScheduleService {
     }
 
     @Transactional
+    @CacheEvict(value = DOCTOR_AVAILABILITY_CACHE, allEntries = true)
     public void clearDayBreaks(Long doctorId, DayOfWeek day, UserPrincipal principal) {
         Doctor doctor = findDoctorOrThrow(doctorId);
         assertOwnership(doctor, principal);

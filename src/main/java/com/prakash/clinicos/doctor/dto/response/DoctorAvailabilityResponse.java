@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.io.Serializable;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -18,11 +19,16 @@ import java.util.List;
  *
  * In Phase 4 all slots are free (no appointments booked yet).
  * Phase 6 (Appointments) will mark slots as BOOKED and subtract them from availableSlots.
+ *
+ * Implements Serializable so it can round-trip through the Redis availability
+ * cache (RedisConfig) via plain JDK serialization — Lombok's @Builder gives
+ * this class no default constructor, which rules out Jackson's usual
+ * reflection-based deserialization without hand-annotating a builder-deserializer.
  */
 @Getter
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class DoctorAvailabilityResponse {
+public class DoctorAvailabilityResponse implements Serializable {
 
     private Long doctorId;
     private String doctorName;
@@ -63,7 +69,7 @@ public class DoctorAvailabilityResponse {
 
     @Getter
     @Builder
-    public static class WorkingWindow {
+    public static class WorkingWindow implements Serializable {
         @JsonFormat(pattern = "HH:mm")
         private LocalTime effectiveStart;
 
@@ -79,7 +85,7 @@ public class DoctorAvailabilityResponse {
 
     @Getter
     @Builder
-    public static class BreakInfo {
+    public static class BreakInfo implements Serializable {
         @JsonFormat(pattern = "HH:mm")
         private LocalTime breakStart;
 

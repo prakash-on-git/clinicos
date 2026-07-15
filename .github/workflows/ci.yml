@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Install GnuCOBOL
+        # ubuntu-latest ships gnucobol4; older runner images used the gnucobol package name.
+        run: sudo apt-get update && (sudo apt-get install -y gnucobol4 || sudo apt-get install -y gnucobol)
+
+      - name: Compile COBOL billing engine
+        run: ./scripts/compile-cobol.sh
+
+      - name: Run tests + JaCoCo coverage gate
+        # ubuntu-latest ships Docker preinstalled, so Testcontainers spins up a real
+        # PostgreSQL container for the integration test suite (AbstractIntegrationTest).
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+
+      - name: Build application jar
+        run: ./mvnw --batch-mode --no-transfer-progress package -DskipTests
+
+      - name: Build Docker image
+        # Validates the Dockerfile builds end-to-end (Maven stage + COBOL compile
+        # stage + JRE runtime stage). Not pushed anywhere — no registry configured.
+        run: docker build -t clinicos:${{ github.sha }} .

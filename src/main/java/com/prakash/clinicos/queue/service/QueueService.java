@@ -19,6 +19,7 @@ import com.prakash.clinicos.queue.repository.QueueTokenRepository;
 import com.prakash.clinicos.security.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,19 +42,31 @@ public class QueueService {
     private final PatientRepository patientRepository;
     private final AppointmentRepository appointmentRepository;
     private final NotificationService notificationService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public QueueService(QueueTokenRepository queueRepository,
                         ClinicRepository clinicRepository,
                         DoctorRepository doctorRepository,
                         PatientRepository patientRepository,
                         AppointmentRepository appointmentRepository,
-                        NotificationService notificationService) {
+                        NotificationService notificationService,
+                        SimpMessagingTemplate messagingTemplate) {
         this.queueRepository = queueRepository;
         this.clinicRepository = clinicRepository;
         this.doctorRepository = doctorRepository;
         this.patientRepository = patientRepository;
         this.appointmentRepository = appointmentRepository;
         this.notificationService = notificationService;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    /**
+     * Pushes the changed token to every screen subscribed to this clinic's queue board.
+     * Called after every state transition so reception/doctor/display screens stay live
+     * without polling.
+     */
+    private void broadcast(Long clinicId, QueueTokenResponse token) {
+        messagingTemplate.convertAndSend("/topic/clinics/" + clinicId + "/queue", token);
     }
 
     // ── Generate token (walk-in) ──────────────────────────────────────────────
@@ -105,7 +118,9 @@ public class QueueService {
         log.info("Walk-in token generated: #{} for doctor={}, patient={}, clinic={}",
                 tokenNumber, doctor.getId(), patient.getId(), clinicId);
 
-        return toResponse(token, doctor.getFullName(), patientFullName(patient));
+        QueueTokenResponse result = toResponse(token, doctor.getFullName(), patientFullName(patient));
+        broadcast(clinicId, result);
+        return result;
     }
 
     // ── Check in (appointment) ────────────────────────────────────────────────
@@ -172,7 +187,9 @@ public class QueueService {
         log.info("Appointment check-in: token=#{}, appointment={}, patient={}, clinic={}",
                 tokenNumber, appt.getId(), patient.getId(), clinicId);
 
-        return toResponse(token, doctor.getFullName(), patientFullName(patient));
+        QueueTokenResponse result = toResponse(token, doctor.getFullName(), patientFullName(patient));
+        broadcast(clinicId, result);
+        return result;
     }
 
     // ── Read ──────────────────────────────────────────────────────────────────
@@ -238,6 +255,7 @@ public class QueueService {
         notificationService.notifyTokenCalled(clinicId, token.getId(),
                 token.getPatientId(), token.getTokenNumber(), doctorName);
 
+        broadcast(clinicId, tokenResult);
         return tokenResult;
     }
 
@@ -265,7 +283,9 @@ public class QueueService {
             });
         }
 
-        return toResponseWithNames(queueRepository.save(token));
+        QueueTokenResponse result = toResponseWithNames(queueRepository.save(token));
+        broadcast(clinicId, result);
+        return result;
     }
 
     /**
@@ -293,7 +313,9 @@ public class QueueService {
 
         log.info("Token #{} completed: clinic={}, doctor={}", token.getTokenNumber(),
                 clinicId, token.getDoctorId());
-        return toResponseWithNames(queueRepository.save(token));
+        QueueTokenResponse result = toResponseWithNames(queueRepository.save(token));
+        broadcast(clinicId, result);
+        return result;
     }
 
     /**
@@ -309,7 +331,9 @@ public class QueueService {
         token.setStatus(QueueStatus.SKIPPED);
         log.info("Token #{} skipped: clinic={}, doctor={}", token.getTokenNumber(),
                 clinicId, token.getDoctorId());
-        return toResponseWithNames(queueRepository.save(token));
+        QueueTokenResponse result = toResponseWithNames(queueRepository.save(token));
+        broadcast(clinicId, result);
+        return result;
     }
 
     /**
@@ -334,7 +358,9 @@ public class QueueService {
 
         log.info("Token recalled with new number #{}: clinic={}, doctor={}",
                 newTokenNumber, clinicId, token.getDoctorId());
-        return toResponseWithNames(queueRepository.save(token));
+        QueueTokenResponse result = toResponseWithNames(queueRepository.save(token));
+        broadcast(clinicId, result);
+        return result;
     }
 
     /**
@@ -353,7 +379,9 @@ public class QueueService {
         token.setStatus(QueueStatus.CANCELLED);
         log.info("Token #{} cancelled: clinic={}, doctor={}", token.getTokenNumber(),
                 clinicId, token.getDoctorId());
-        return toResponseWithNames(queueRepository.save(token));
+        QueueTokenResponse result = toResponseWithNames(queueRepository.save(token));
+        broadcast(clinicId, result);
+        return result;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

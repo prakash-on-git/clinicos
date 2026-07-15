@@ -1,0 +1,100 @@
+services:
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: clinicos-postgres
+    environment:
+      POSTGRES_DB:       clinicos
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: devxprakash
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clinicos"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 30s
+
+  # ── Redis 7 – availability cache ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: clinicos-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 10s
+
+  # ── Spring Boot App ──────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: clinicos-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Datasource — points to the postgres service by container name
+      DB_URL:      jdbc:postgresql://postgres:5432/clinicos
+      DB_USERNAME: postgres
+      DB_PASSWORD: devxprakash
+
+      # Redis — points to the redis service by container name
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Server
+      PORT: 8080
+
+      # JWT — override in production via .env file or secret manager
+      # Default fallback in application.yaml is used when this is not set
+      JWT_SECRET: ${JWT_SECRET:-zyHjz85kJ7Ls02cQqMZshaV6PEuuXlfTZ0FkPdj+52C7wE061uoB/hyDa/Af2JyZyMv1RSXs5m0o0PoqLqfkHQ==}
+
+    depends_on:
+      postgres:
+        condition: service_healthy   # wait for postgres health check to pass
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  # ── Prometheus – metric scraping ─────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clinicos-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # ── Grafana – dashboards ─────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clinicos-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED:  "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+# ── Named volumes ────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

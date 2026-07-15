@@ -62,6 +62,11 @@ public class SecurityConfig {
                         // Swagger UI — always public so reviewers/interviewers can explore the API
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html",
                                 "/api-docs/**", "/api-docs").permitAll()
+                        // Actuator — health/metrics for local Prometheus scraping and container health checks
+                        .requestMatchers("/actuator/**").permitAll()
+                        // WebSocket handshake — STOMP client auth happens at the SUBSCRIBE frame level instead,
+                        // since browsers cannot attach an Authorization header to the initial handshake request
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()          // all auth endpoints are public
                         .requestMatchers("/api/v1/me/**").authenticated()        // patient portal — any authenticated user
                         // Patient data is private — must be authenticated even for reads.

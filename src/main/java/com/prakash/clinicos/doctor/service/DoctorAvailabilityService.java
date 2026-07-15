@@ -11,9 +11,12 @@ import com.prakash.clinicos.doctor.dto.response.DoctorAvailabilityResponse;
 import com.prakash.clinicos.doctor.entity.*;
 import com.prakash.clinicos.doctor.repository.*;
 import com.prakash.clinicos.exception.AppException;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static com.prakash.clinicos.config.RedisConfig.DOCTOR_AVAILABILITY_CACHE;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -72,6 +75,7 @@ public class DoctorAvailabilityService {
         this.appointmentRepository = appointmentRepository;
     }
 
+    @Cacheable(value = DOCTOR_AVAILABILITY_CACHE, key = "#doctorId + '_' + #date")
     public DoctorAvailabilityResponse computeAvailability(Long doctorId, LocalDate date) {
 
         // ── Step 1: Load doctor ───────────────────────────────────────────────

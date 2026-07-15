@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: clinicos
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # "app" resolves via the docker-compose network; swap for localhost:8080
+      # when running the app outside Docker while Prometheus is inside it.
+      - targets: ["app:8080"]
